@@ -31,7 +31,7 @@ public class Interpreter {
         try {
             // specify the .txt file with the program
             String program = convertFileToProgram2("src/GameOfLife.txt");
-            // execute the program
+
             execute(program);
         } catch (IOException e) {
             System.err.println("Error reading program file: " + e.getMessage());
