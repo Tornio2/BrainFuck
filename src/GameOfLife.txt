@@ -1,7 +1,7 @@
 # found that shiii online type shit
 # very cool tho shiiet
 # make cells active by writing their coords : ab, cd bb for example
-# if u want to proceed to the next iteration press enter
+# if you want to proceed to the next iteration press enter
 
 
        +>>++++[<++++>-]<[<++++++>-]+[<[>>>>+<<<<-]>>>>[<<<<+>>>>>>+<<-]<+
