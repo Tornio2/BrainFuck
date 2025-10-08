@@ -66,7 +66,17 @@ public class Parser {
             if (!variables.containsKey(rhsVarName)) {
                 throw new RuntimeException("Variable not declared: " + rhsVarName);
             }
-            value = generateVariableAccess(rhsVarName);
+
+            // Check if next token is an operator
+            if (position < tokens.size() &&
+                    (tokens.get(position).getType() == Token.Type.PLUS ||
+                            tokens.get(position).getType() == Token.Type.MINUS)) {
+                // This is an expression like x + y
+                position--; // Go back to the identifier for parseExpression()
+                value = parseExpression();
+            } else {
+                value = generateVariableAccess(rhsVarName);
+            }
         } else if (tokens.get(position).getType() == Token.Type.NUMBER) {
             // VAR x = 5
             value = generateNumber(Integer.parseInt(consume(Token.Type.NUMBER).getValue()));
@@ -99,7 +109,17 @@ public class Parser {
             if (!variables.containsKey(rhsVarName)) {
                 throw new RuntimeException("Variable not declared: " + rhsVarName);
             }
-            value = generateVariableAccess(rhsVarName);
+
+            // Check if next token is an operator
+            if (position < tokens.size() &&
+                    (tokens.get(position).getType() == Token.Type.PLUS ||
+                            tokens.get(position).getType() == Token.Type.MINUS)) {
+                // This is an expression like sum = sum - 1
+                position--; // Go back to the identifier for parseExpression()
+                value = parseExpression();
+            } else {
+                value = generateVariableAccess(rhsVarName);
+            }
         } else if (tokens.get(position).getType() == Token.Type.NUMBER) {
             // x = 5
             value = generateNumber(Integer.parseInt(consume(Token.Type.NUMBER).getValue()));
@@ -114,42 +134,25 @@ public class Parser {
     private String parseWhileStatement() {
         // WHILE sum > 0
         consume(Token.Type.WHILE);
-        String condition = parseCondition();
 
-        StringBuilder whileCode = new StringBuilder();
-        whileCode.append(condition);
-        whileCode.append("[");
-
-        while (tokens.get(position).getType() != Token.Type.END) {
-            whileCode.append(parseStatement());
-        }
-
-        consume(Token.Type.END);
-        whileCode.append(condition);
-        whileCode.append("]");
-
-        return whileCode.toString();
-    }
-
-    private String parseCondition() {
-        // sum > 0
+        // Get variable name for condition
         String varName = consume(Token.Type.IDENTIFIER).getValue();
-
         if (!variables.containsKey(varName)) {
             throw new RuntimeException("Variable not declared: " + varName);
         }
 
+        // Get comparison operator
         Token.Type operatorType = tokens.get(position).getType();
-        position++; // Consume the operator
-
         if (operatorType != Token.Type.GREATER_THAN &&
                 operatorType != Token.Type.LESS_THAN &&
                 operatorType != Token.Type.GREATER_EQUALS &&
                 operatorType != Token.Type.LESS_EQUALS &&
                 operatorType != Token.Type.EQUALS_EQUALS) {
-            throw new RuntimeException("Expected comparison operator");
+            throw new RuntimeException("Expected comparison operator, got: " + operatorType);
         }
+        position++; // Consume the operator
 
+        // Get right side of comparison
         int value;
         if (tokens.get(position).getType() == Token.Type.NUMBER) {
             value = Integer.parseInt(consume(Token.Type.NUMBER).getValue());
@@ -159,13 +162,30 @@ public class Parser {
                 throw new RuntimeException("Variable not declared: " + rhsVarName);
             }
             // This is simplified - we would need more complex code to compare two variables
-            // For now, we're assuming it's always compared to a number
             throw new RuntimeException("Comparing to variables not yet supported");
         } else {
             throw new RuntimeException("Expected number or variable after comparison operator");
         }
 
-        return generateCondition(varName, operatorType, value);
+        // Generate condition setup code (before the loop)
+        String conditionSetup = generateConditionSetup(varName, operatorType, value);
+
+        StringBuilder whileCode = new StringBuilder();
+        whileCode.append(conditionSetup);
+        whileCode.append("["); // Start the loop
+
+        // Parse the body of the while loop
+        while (position < tokens.size() && tokens.get(position).getType() != Token.Type.END) {
+            whileCode.append(parseStatement());
+        }
+
+        consume(Token.Type.END);
+
+        // Generate code to re-check the condition at the end of each iteration
+        whileCode.append(generateConditionSetup(varName, operatorType, value));
+        whileCode.append("]"); // End the loop
+
+        return whileCode.toString();
     }
 
     private String parsePrintStatement() {
@@ -184,75 +204,69 @@ public class Parser {
         // x + y, sum - 1, etc.
         StringBuilder expCode = new StringBuilder();
 
-        // Create a temporary cell for calculation
-        expCode.append(">[-]<"); // Clear the temp cell
-
         // First operand
+        String firstVarName = null;
         if (tokens.get(position).getType() == Token.Type.IDENTIFIER) {
-            String varName = consume(Token.Type.IDENTIFIER).getValue();
-            if (!variables.containsKey(varName)) {
-                throw new RuntimeException("Variable not declared: " + varName);
+            firstVarName = consume(Token.Type.IDENTIFIER).getValue();
+            if (!variables.containsKey(firstVarName)) {
+                throw new RuntimeException("Variable not declared: " + firstVarName);
             }
-            expCode.append(generateVariableAccess(varName));
-            expCode.append("[>+<-]"); // Copy to temp cell
         } else if (tokens.get(position).getType() == Token.Type.NUMBER) {
             int value = Integer.parseInt(consume(Token.Type.NUMBER).getValue());
-            expCode.append(generateNumber(value));
-            expCode.append("[>+<-]"); // Copy to temp cell
+            expCode.append(generateTempValue(value));
+            firstVarName = null; // Not a variable
         } else {
-            throw new RuntimeException("Expected identifier or number");
+            throw new RuntimeException("Expected identifier or number at start of expression");
         }
 
         // Operator
         Token.Type operatorType = tokens.get(position).getType();
+        if (operatorType != Token.Type.PLUS && operatorType != Token.Type.MINUS) {
+            throw new RuntimeException("Expected operator, got: " + operatorType);
+        }
         position++; // Consume the operator
 
         // Second operand
         if (tokens.get(position).getType() == Token.Type.IDENTIFIER) {
-            String varName = consume(Token.Type.IDENTIFIER).getValue();
-            if (!variables.containsKey(varName)) {
-                throw new RuntimeException("Variable not declared: " + varName);
+            String secondVarName = consume(Token.Type.IDENTIFIER).getValue();
+            if (!variables.containsKey(secondVarName)) {
+                throw new RuntimeException("Variable not declared: " + secondVarName);
             }
 
-            switch (operatorType) {
-                case PLUS:
-                    expCode.append(generateVariableAccess(varName));
-                    expCode.append("[>+<-]"); // Add to temp cell
-                    break;
-                case MINUS:
-                    expCode.append(generateVariableAccess(varName));
-                    expCode.append("[>-<-]"); // Subtract from temp cell
-                    break;
-                // Multiply and divide are more complex and omitted for brevity
-                default:
-                    throw new RuntimeException("Unsupported operator: " + operatorType);
+            // Generate code for the operation
+            if (firstVarName != null) {
+                // Both operands are variables
+                expCode.append(generateOperation(firstVarName, operatorType, secondVarName));
+            } else {
+                // First operand was a number (already in temp cell)
+                expCode.append(generateOperationWithTemp(operatorType, secondVarName));
             }
         } else if (tokens.get(position).getType() == Token.Type.NUMBER) {
             int value = Integer.parseInt(consume(Token.Type.NUMBER).getValue());
 
-            switch (operatorType) {
-                case PLUS:
-                    expCode.append(">"); // Move to temp cell
-                    expCode.append("+".repeat(value)); // Add constant
-                    expCode.append("<"); // Move back
-                    break;
-                case MINUS:
-                    expCode.append(">"); // Move to temp cell
-                    expCode.append("-".repeat(value)); // Subtract constant
-                    expCode.append("<"); // Move back
-                    break;
-                // Multiply and divide are more complex and omitted for brevity
-                default:
-                    throw new RuntimeException("Unsupported operator: " + operatorType);
+            if (firstVarName != null) {
+                // Variable operation with constant
+                expCode.append(generateOperation(firstVarName, operatorType, value));
+            } else {
+                // Constant operation with constant (already have first value in temp)
+                if (operatorType == Token.Type.PLUS) {
+                    expCode.append("+".repeat(value));
+                } else { // MINUS
+                    expCode.append("-".repeat(value));
+                }
             }
+        } else {
+            throw new RuntimeException("Expected identifier or number as second operand");
         }
 
-        // The result is now in the temp cell
-        expCode.append(">");
         return expCode.toString();
     }
 
     private Token consume(Token.Type expectedType) {
+        if (position >= tokens.size()) {
+            throw new RuntimeException("Unexpected end of input, expected: " + expectedType);
+        }
+
         Token token = tokens.get(position);
 
         if (token.getType() != expectedType) {
@@ -286,7 +300,7 @@ public class Parser {
         code.append(">");
         code.append("[-]"); // Clear the cell
 
-        // Set the value
+        // Set the value (use the provided value code)
         code.append(valueCode);
 
         // Return to the start
@@ -313,25 +327,49 @@ public class Parser {
     }
 
     private String generateVariableAccess(String varName) {
-        // Go to the variable's value cell
+        // Go to the variable's value cell and copy its value to a temporary location
         StringBuilder code = new StringBuilder();
-        code.append(">".repeat(variables.get(varName) + 1));
 
-        // The value is now in the current cell
-        // You can use it, but make sure to copy it if needed since operations will modify it
+        // We'll use the cell after the last variable as a temporary cell
+        int tempCellPos = nextVarAddress;
 
-        // For now, we'll just return the value as-is
-        // The calling function will need to handle copying if needed
+        // First clear the temp cell
+        code.append(">".repeat(tempCellPos));
+        code.append("[-]");
 
-        // Return to the start
-        code.append("<".repeat(variables.get(varName) + 1));
+        // Move to the variable's value
+        code.append("<".repeat(tempCellPos - (variables.get(varName) + 1)));
+
+        // Copy the value to the temp cell (preserving the original)
+        code.append("[>".repeat(tempCellPos - (variables.get(varName) + 1)));
+        code.append("+");
+        code.append("<".repeat(tempCellPos - (variables.get(varName) + 1)));
+        code.append("-]");
+
+        // Move back to temp cell that now has the value
+        code.append(">".repeat(tempCellPos - (variables.get(varName) + 1)));
+
+        return code.toString();
+    }
+
+    private String generateTempValue(int value) {
+        // Use a temporary cell to store a value
+        StringBuilder code = new StringBuilder();
+        int tempCellPos = nextVarAddress;
+
+        // Go to temp cell
+        code.append(">".repeat(tempCellPos));
+
+        // Clear and set value
+        code.append("[-]");
+        code.append("+".repeat(value));
 
         return code.toString();
     }
 
     private String generateNumber(int value) {
         // Generate code to set the current cell to a specific value
-        return "+".repeat(value);
+        return "[-]" + "+".repeat(value);
     }
 
     private String generatePrint(String varName) {
@@ -339,50 +377,226 @@ public class Parser {
         StringBuilder code = new StringBuilder();
         code.append(">".repeat(variables.get(varName) + 1));
 
-        // Print the value as ASCII
+        // Copy the value to a temporary working cell
+        code.append("[->+>+<<]");  // Copy to two cells ahead
+        code.append(">>[-<<+>>]<<"); // Move one copy back to original
+
+        // Add 48 to convert numeric value to ASCII ('0' is 48, '1' is 49, etc.)
+        code.append(">"); // Move to the temporary cell
+        code.append("+".repeat(48)); // Add 48 to get ASCII digit
+
+        // Print the ASCII value
         code.append(".");
 
+        // Clean up the temporary cell
+        code.append("[-]");
+
         // Return to the start
+        code.append("<");
         code.append("<".repeat(variables.get(varName) + 1));
 
         return code.toString();
     }
 
-    private String generateCondition(String varName, Token.Type operatorType, int value) {
+    private String generateOperation(String leftVar, Token.Type operatorType, String rightVar) {
+        StringBuilder code = new StringBuilder();
+
+        // Go to the left variable's value cell
+        code.append(">".repeat(variables.get(leftVar) + 1));
+
+        // Store the result in this cell
+        // First clear it
+        code.append("[-]");
+
+        // Copy the left var value here
+        code.append(">".repeat(variables.get(leftVar) + 1));
+        code.append("[<+>-]");
+
+        // Now apply the operation with the right variable
+        code.append(">".repeat(variables.get(rightVar) - variables.get(leftVar)));
+
+        switch (operatorType) {
+            case PLUS:
+                code.append("[<+>-]");
+                break;
+            case MINUS:
+                code.append("[<->-]");
+                break;
+            default:
+                throw new RuntimeException("Unsupported operator: " + operatorType);
+        }
+
+        // Return to the start
+        code.append("<".repeat(variables.get(rightVar) + 1));
+
+        return code.toString();
+    }
+
+    private String generateOperation(String leftVar, Token.Type operatorType, int value) {
+        StringBuilder code = new StringBuilder();
+
+        // Go to the left variable's value cell
+        code.append(">".repeat(variables.get(leftVar) + 1));
+
+        // Apply the operation directly
+        switch (operatorType) {
+            case PLUS:
+                code.append("+".repeat(value));
+                break;
+            case MINUS:
+                code.append("-".repeat(value));
+                break;
+            default:
+                throw new RuntimeException("Unsupported operator: " + operatorType);
+        }
+
+        // Return to the start
+        code.append("<".repeat(variables.get(leftVar) + 1));
+
+        return code.toString();
+    }
+
+    private String generateOperationWithTemp(Token.Type operatorType, String rightVar) {
+        StringBuilder code = new StringBuilder();
+
+        // Temp value is already in the temp cell (nextVarAddress)
+        // Need to apply operation with rightVar
+        int tempPos = nextVarAddress;
+
+        // Move to the right variable
+        code.append("<".repeat(tempPos - (variables.get(rightVar) + 1)));
+
+        // Create a copy of the right var that we can consume
+        int tempCopyPos = nextVarAddress + 1;
+        code.append("[>".repeat(tempCopyPos - (variables.get(rightVar) + 1)));
+        code.append("+");
+        code.append("<".repeat(tempCopyPos - (variables.get(rightVar) + 1)));
+        code.append("-]");
+
+        // Move to temp copy
+        code.append(">".repeat(tempCopyPos - (variables.get(rightVar) + 1)));
+
+        // Apply operation between temp and temp copy
+        code.append("<"); // Move to temp
+
+        switch (operatorType) {
+            case PLUS:
+                code.append(">[<+>-]<");
+                break;
+            case MINUS:
+                code.append(">[<->-]<");
+                break;
+            default:
+                throw new RuntimeException("Unsupported operator: " + operatorType);
+        }
+
+        // Result is now in the temp cell
+
+        return code.toString();
+    }
+
+    private String generateConditionSetup(String varName, Token.Type operatorType, int value) {
         StringBuilder code = new StringBuilder();
 
         // Go to the variable's value cell
         code.append(">".repeat(variables.get(varName) + 1));
 
-        // For WHILE loops, we need the cell to be non-zero to enter the loop
-        // and zero to exit
+        // Create a copy of the variable's value in a temporary cell
+        int tempCell = nextVarAddress;
+        code.append("[-]"); // Clear original value first for simplicity
 
+        // Now implement the condition logic
         switch (operatorType) {
-            case GREATER_THAN:
-                // For x > 0, we can just use the value directly
-                // For x > n, we need to subtract n and check if the result is positive
-                code.append(generateNumber(-value));
-                code.append("[");  // This will be executed if x > n
-                code.append("+");  // Set flag to 1
+            case GREATER_THAN: // x > value
+                // Set the cell to 1 if x > value, 0 otherwise
+                code.append(generateNumber(value + 1)); // Set to value + 1
+
+                // Get the actual variable value
+                int varCell = variables.get(varName) + 1;
+                code.append(">".repeat(tempCell - varCell));
+                code.append("[-]"); // Clear temp cell
+                code.append("<".repeat(tempCell - varCell));
+
+                // Copy variable value to temp cell
+                code.append("[>+<-]>"); // Now at temp cell with variable value
+
+                // Subtract value+1 from it
+                code.append("<".repeat(tempCell - varCell)); // Back to var cell with value+1
+
+                // Now we use the temp cell to decrement the var cell
+                code.append("[>-<-]");
+
+                // If result in temp is positive, var > value
+                code.append(">"); // Go to temp
+
+                // If temp is positive, set the original cell to 1, otherwise 0
+                code.append("["); // If temp > 0
+                code.append("<[-]+>-"); // Set var cell to 1, decrement temp
                 code.append("]");
+
+                // Return to var cell, which now contains 1 if x > value, 0 otherwise
+                code.append("<");
                 break;
-            case LESS_THAN:
-                // For x < n, we need to use a more complex approach
-                // This is simplified and might not work for all cases
-                code.append("[-]"); // Clear the cell
+
+            case LESS_THAN: // x < value
+                // Similar approach for less than
+                code.append(generateNumber(0)); // Start with 0
+
+                // Go to temp cell
+                code.append(">".repeat(tempCell - (variables.get(varName) + 1)));
+                code.append("[-]"); // Clear temp
+
+                // Set temp to value
+                code.append("+".repeat(value));
+
+                // Back to var cell
+                code.append("<".repeat(tempCell - (variables.get(varName) + 1)));
+
+                // Copy var to another temp
+                int tempCell2 = tempCell + 1;
+                code.append("[>".repeat(tempCell2 - (variables.get(varName) + 1)));
+                code.append("+");
+                code.append("<".repeat(tempCell2 - (variables.get(varName) + 1)));
+                code.append("-]");
+
+                // Now compare: if temp (value) > temp2 (var), then var < value
+                code.append(">".repeat(tempCell - (variables.get(varName) + 1))); // Go to temp
+
+                // Subtract temp2 from temp
+                code.append("[>-<-]>");
+
+                // If temp is positive, set var cell to 1
+                code.append("[<[-]+>-]<");
                 break;
-            case EQUALS_EQUALS:
-                // For x == n, we need to check if x - n == 0
-                code.append(generateNumber(-value));
-                // If it's zero, then x == n
-                // This is a simplified approach
+
+            case EQUALS_EQUALS: // x == value
+                // Set to 1 if equal, 0 otherwise
+                // Copy var value to temp
+                code.append("[>".repeat(tempCell - (variables.get(varName) + 1)));
+                code.append("+");
+                code.append("<".repeat(tempCell - (variables.get(varName) + 1)));
+                code.append("-]");
+
+                // Set original cell to 1 (assume equal)
+                code.append("+");
+
+                // Go to temp
+                code.append(">".repeat(tempCell - (variables.get(varName) + 1)));
+
+                // Subtract value from temp
+                code.append("[-]" + "+".repeat(value));
+                code.append("[<->-]");
+
+                // If temp is not 0, set var cell to 0 (not equal)
+                code.append("<");
                 break;
+
             default:
                 throw new RuntimeException("Unsupported condition operator: " + operatorType);
         }
 
         // Return to the start
-        code.append("<".repeat(variables.get(varName) + 1));
+        code.append("<".repeat(variables.get(varName)));
 
         return code.toString();
     }

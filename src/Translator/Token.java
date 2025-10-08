@@ -2,11 +2,11 @@ package Translator;
 
 public class Token {
     public enum Type {
-        VAR, PRINT, WHILE, END,
-        IDENTIFIER, NUMBER,
-        EQUALS, PLUS, MINUS, MULTIPLY, DIVIDE,
-        GREATER_THAN, LESS_THAN, GREATER_EQUALS, LESS_EQUALS, EQUALS_EQUALS,
-        LEFT_PAREN, RIGHT_PAREN,
+        VAR, IDENTIFIER, NUMBER,
+        EQUALS, EQUALS_EQUALS,
+        PLUS, MINUS, MULTIPLY, DIVIDE,
+        GREATER_THAN, LESS_THAN, GREATER_EQUALS, LESS_EQUALS,
+        PRINT, WHILE, END,
         EOF
     }
 
@@ -28,6 +28,6 @@ public class Token {
 
     @Override
     public String toString() {
-        return type + (value.isEmpty() ? "" : ": " + value);
+        return type + ": " + value;
     }
 }

@@ -1,7 +1,5 @@
 package Translator;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -11,23 +9,24 @@ public class BrainfuckCompiler {
         try {
             String sourceCode = new String(Files.readAllBytes(Paths.get("src/Translator/program.txt")));
 
+
             Lexer lexer = new Lexer(sourceCode);
             Parser parser = new Parser(lexer);
 
             String brainfuckCode = parser.parse();
-
-            // Write the Brainfuck code to a file
-            BufferedWriter writer = new BufferedWriter(new FileWriter("output.bf"));
-            writer.write(brainfuckCode);
-            writer.close();
-
-            System.out.println("Compilation successful. Brainfuck code written to output.bf");
-            System.out.println("Generated Brainfuck code:");
+            System.out.println("Generated Brainfuck Code:");
             System.out.println(brainfuckCode);
+
+            // Optionally save to a file
+            if (args.length > 1) {
+                Files.write(Paths.get(args[1]), brainfuckCode.getBytes());
+                System.out.println("Output saved to " + args[1]);
+            }
+
         } catch (IOException e) {
             System.err.println("Error reading file: " + e.getMessage());
         } catch (RuntimeException e) {
-            System.err.println(e.getMessage());
+            System.err.println("Compilation error: " + e.getMessage());
         }
     }
 }
