@@ -2,82 +2,134 @@ package Translator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class Lexer {
-    private static final Pattern TOKEN_PATTERN = Pattern.compile(
-            "VAR|PRINT|WHILE|END|[a-zA-Z_][a-zA-Z0-9_]*|\\d+|\\+|\\-|\\*|/|>|<|=|==|!=|\\(|\\)|\\{|\\}|\\s+");
-
-    private final String sourceCode;
-    private final List<Token> tokens = new ArrayList<>();
+    private final String source;
     private int position = 0;
+    private final List<Token> tokens = new ArrayList<>();
 
-    public Lexer(String sourceCode) {
-        this.sourceCode = sourceCode;
-        tokenize();
+    public Lexer(String source) {
+        this.source = source;
     }
 
-    private void tokenize() {
-        Matcher matcher = TOKEN_PATTERN.matcher(sourceCode);
+    public List<Token> tokenize() {
+        while (position < source.length()) {
+            char c = source.charAt(position);
 
-        while (matcher.find()) {
-            String value = matcher.group().trim();
-            if (value.isEmpty()) continue;
+            if (Character.isWhitespace(c)) {
+                position++;
+                continue;
+            }
 
-            TokenType type = determineType(value);
-            if (type != TokenType.WHITESPACE) {
-                tokens.add(new Token(type, value));
+            if (Character.isLetter(c)) {
+                lexIdentifier();
+                continue;
+            }
+
+            if (Character.isDigit(c)) {
+                lexNumber();
+                continue;
+            }
+
+            switch (c) {
+                case '=':
+                    if (position + 1 < source.length() && source.charAt(position + 1) == '=') {
+                        tokens.add(new Token(Token.Type.EQUALS_EQUALS, "=="));
+                        position += 2;
+                    } else {
+                        tokens.add(new Token(Token.Type.EQUALS, "="));
+                        position++;
+                    }
+                    break;
+                case '+':
+                    tokens.add(new Token(Token.Type.PLUS, "+"));
+                    position++;
+                    break;
+                case '-':
+                    tokens.add(new Token(Token.Type.MINUS, "-"));
+                    position++;
+                    break;
+                case '*':
+                    tokens.add(new Token(Token.Type.MULTIPLY, "*"));
+                    position++;
+                    break;
+                case '/':
+                    tokens.add(new Token(Token.Type.DIVIDE, "/"));
+                    position++;
+                    break;
+                case '>':
+                    if (position + 1 < source.length() && source.charAt(position + 1) == '=') {
+                        tokens.add(new Token(Token.Type.GREATER_EQUALS, ">="));
+                        position += 2;
+                    } else {
+                        tokens.add(new Token(Token.Type.GREATER_THAN, ">"));
+                        position++;
+                    }
+                    break;
+                case '<':
+                    if (position + 1 < source.length() && source.charAt(position + 1) == '=') {
+                        tokens.add(new Token(Token.Type.LESS_EQUALS, "<="));
+                        position += 2;
+                    } else {
+                        tokens.add(new Token(Token.Type.LESS_THAN, "<"));
+                        position++;
+                    }
+                    break;
+                case '(':
+                    tokens.add(new Token(Token.Type.LEFT_PAREN, "("));
+                    position++;
+                    break;
+                case ')':
+                    tokens.add(new Token(Token.Type.RIGHT_PAREN, ")"));
+                    position++;
+                    break;
+                default:
+                    throw new RuntimeException("Unexpected character: " + c);
             }
         }
 
-        tokens.add(new Token(TokenType.EOF, ""));
+        tokens.add(new Token(Token.Type.EOF, ""));
+        return tokens;
     }
 
-    private TokenType determineType(String value) {
-        switch (value) {
-            case "VAR": return TokenType.VAR;
-            case "PRINT": return TokenType.PRINT;
-            case "WHILE": return TokenType.WHILE;
-            case "END": return TokenType.END;
-            case "+": return TokenType.PLUS;
-            case "-": return TokenType.MINUS;
-            case ">": return TokenType.GREATER_THAN;
-            case "<": return TokenType.LESS_THAN;
-            case "=": return TokenType.ASSIGN;
-            case "==": return TokenType.EQUALS;
+    private void lexIdentifier() {
+        StringBuilder builder = new StringBuilder();
+
+        while (position < source.length() &&
+                (Character.isLetterOrDigit(source.charAt(position)) || source.charAt(position) == '_')) {
+            builder.append(source.charAt(position));
+            position++;
         }
 
-        if (value.matches("\\d+")) {
-            return TokenType.NUMBER;
-        }
+        String identifier = builder.toString();
 
-        if (value.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-            return TokenType.IDENTIFIER;
+        switch (identifier) {
+            case "VAR":
+                tokens.add(new Token(Token.Type.VAR, identifier));
+                break;
+            case "PRINT":
+                tokens.add(new Token(Token.Type.PRINT, identifier));
+                break;
+            case "WHILE":
+                tokens.add(new Token(Token.Type.WHILE, identifier));
+                break;
+            case "END":
+                tokens.add(new Token(Token.Type.END, identifier));
+                break;
+            default:
+                tokens.add(new Token(Token.Type.IDENTIFIER, identifier));
+                break;
         }
-
-        if (value.matches("\\s+")) {
-            return TokenType.WHITESPACE;
-        }
-
-        return TokenType.UNKNOWN;
     }
 
-    public Token getNextToken() {
-        if (position >= tokens.size()) {
-            return new Token(TokenType.EOF, "");
-        }
-        return tokens.get(position++);
-    }
+    private void lexNumber() {
+        StringBuilder builder = new StringBuilder();
 
-    public Token peekToken() {
-        if (position >= tokens.size()) {
-            return new Token(TokenType.EOF, "");
+        while (position < source.length() && Character.isDigit(source.charAt(position))) {
+            builder.append(source.charAt(position));
+            position++;
         }
-        return tokens.get(position);
-    }
 
-    public void reset() {
-        position = 0;
+        tokens.add(new Token(Token.Type.NUMBER, builder.toString()));
     }
 }
