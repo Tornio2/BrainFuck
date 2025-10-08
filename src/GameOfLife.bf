@@ -1,7 +1,8 @@
 # found that shiii online type shit
-# very cool tho shiiet
+# very cool tho
 # make cells active by writing their coords : ab, cd bb for example
 # if you want to proceed to the next iteration press enter
+# https://www.linusakesson.net/programming/brainfuck/
 
 
        +>>++++[<++++>-]<[<++++++>-]+[<[>>>>+<<<<-]>>>>[<<<<+>>>>>>+<<-]<+

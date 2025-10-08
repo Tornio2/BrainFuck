@@ -30,7 +30,7 @@ public class Interpreter {
     public static void main(String[] args) {
         try {
             // specify the .txt file with the program
-            String program = convertFileToProgram2("src/GameOfLife.txt");
+            String program = convertFileToProgram2("src/GameOfLife.bf");
 
             execute(program);
         } catch (IOException e) {
